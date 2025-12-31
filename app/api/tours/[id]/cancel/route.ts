@@ -2,7 +2,7 @@ import { NextResponse } from "next/server"
 import { cancelTour } from "../../../../../../database/queries"
 
 export async function POST(_request: Request, { params }: { params: { id: string } }) {
-  const updated = cancelTour(params.id)
+  const updated = await cancelTour(params.id)
   if (!updated) return NextResponse.json({ error: "Tour not found" }, { status: 404 })
   return NextResponse.json({ data: updated })
 }

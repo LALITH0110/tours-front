@@ -8,7 +8,7 @@ export async function POST(request: Request, { params }: { params: { id: string 
     return NextResponse.json({ error: "capacity must be a positive integer" }, { status: 400 })
   }
   try {
-    const updated = overrideCapacity(params.id, cap)
+    const updated = await overrideCapacity(params.id, cap)
     if (!updated) return NextResponse.json({ error: "Tour not found" }, { status: 404 })
     return NextResponse.json({ data: updated })
   } catch (err) {

@@ -2,7 +2,8 @@ import { NextResponse } from "next/server"
 import { createTour, listTours } from "../../../../database/queries"
 
 export async function GET() {
-  return NextResponse.json({ data: listTours() })
+  const data = await listTours()
+  return NextResponse.json({ data })
 }
 
 export async function POST(request: Request) {
@@ -15,6 +16,6 @@ export async function POST(request: Request) {
   if (!Number.isFinite(cap) || cap < 1) {
     return NextResponse.json({ error: "capacity must be a positive integer" }, { status: 400 })
   }
-  const created = createTour({ name, startTime, endTime, capacity: cap })
+  const created = await createTour({ name, startTime, endTime, capacity: cap })
   return NextResponse.json({ data: created }, { status: 201 })
 }
