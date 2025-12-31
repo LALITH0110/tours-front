@@ -1,5 +1,5 @@
 import { NextResponse } from "next/server"
-import { getTour, updateTour } from "../../../../../database/queries"
+import { getTour, updateTour } from "../../../../database/queries"
 
 export async function GET(_request: Request, { params }: { params: { id: string } }) {
   const tour = await getTour(params.id)

@@ -1,5 +1,5 @@
 import { NextResponse } from "next/server"
-import { removeRegistration } from "../../../../../database/queries"
+import { removeRegistration } from "../../../../database/queries"
 
 export async function DELETE(_request: Request, { params }: { params: { id: string } }) {
   const removed = await removeRegistration(params.id)

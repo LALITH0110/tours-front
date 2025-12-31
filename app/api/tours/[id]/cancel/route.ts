@@ -1,5 +1,5 @@
 import { NextResponse } from "next/server"
-import { cancelTour } from "../../../../../../database/queries"
+import { cancelTour } from "../../../../../database/queries"
 
 export async function POST(_request: Request, { params }: { params: { id: string } }) {
   const updated = await cancelTour(params.id)

@@ -1,5 +1,5 @@
 import { NextResponse } from "next/server"
-import { resumeTour } from "../../../../../../database/queries"
+import { resumeTour } from "../../../../../database/queries"
 
 export async function POST(_request: Request, { params }: { params: { id: string } }) {
   const updated = await resumeTour(params.id)

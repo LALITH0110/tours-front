@@ -1,5 +1,5 @@
 import { NextResponse } from "next/server"
-import { overrideCapacity } from "../../../../../../database/queries"
+import { overrideCapacity } from "../../../../../database/queries"
 
 export async function POST(request: Request, { params }: { params: { id: string } }) {
   const body = await request.json().catch(() => ({}))

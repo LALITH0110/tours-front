@@ -1,5 +1,5 @@
 import { NextResponse } from "next/server"
-import { toggleCheckIn } from "../../../../../../database/queries"
+import { toggleCheckIn } from "../../../../../database/queries"
 
 export async function PATCH(_request: Request, { params }: { params: { id: string } }) {
   const updated = await toggleCheckIn(params.id)
