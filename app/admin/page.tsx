@@ -553,7 +553,7 @@ export default function AdminPage() {
                 </CardHeader>
                 <CardContent className="space-y-6">
                   <div className="space-y-2">
-                    <Label htmlFor="max-tickets">Max Tickets Per Student</Label>
+                    <Label htmlFor="max-tickets">Max Tours Per Student</Label>
                     <Input
                       id="max-tickets"
                       type="number"

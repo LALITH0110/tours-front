@@ -39,7 +39,7 @@ export interface Registration {
   tour?: Tour
 }
 
-const API_BASE_URL = process.env.NEXT_PUBLIC_API_BASE_URL || "http://localhost:4000"
+const API_BASE_URL = process.env.NEXT_PUBLIC_API_BASE_URL || "/api"
 
 async function api<T>(path: string, init?: RequestInit): Promise<T> {
   const res = await fetch(`${API_BASE_URL}${path}`, {
@@ -81,9 +81,10 @@ export const apiClient = {
     api<Student>("/students", { method: "POST", body: JSON.stringify(payload) }),
   listRegistrations: (tourId?: string) =>
     api<Registration[]>(`/registrations${tourId ? `?tourId=${encodeURIComponent(tourId)}` : ""}`),
+  listRegistrationsByStudent: (studentId: string) =>
+    api<Registration[]>(`/registrations?studentId=${encodeURIComponent(studentId)}`),
   createRegistration: (payload: {
     tourId: string
-    tickets: number
     studentId?: string
     student?: Pick<Student, "name" | "email" | "studentId">
   }) =>
@@ -93,4 +94,6 @@ export const apiClient = {
     }),
   toggleCheckIn: (registrationId: string) =>
     api<Registration>(`/registrations/${registrationId}/checkin`, { method: "PATCH" }),
+  deleteRegistration: (registrationId: string) =>
+    api<Registration>(`/registrations/${registrationId}`, { method: "DELETE" }),
 }

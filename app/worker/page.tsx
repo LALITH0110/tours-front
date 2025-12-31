@@ -6,7 +6,6 @@ import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 import { Badge } from "@/components/ui/badge"
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import { ArrowLeft, Search, CheckCircle2, UserPlus } from "lucide-react"
@@ -27,7 +26,8 @@ export default function WorkerPage() {
   const [searchResults, setSearchResults] = useState<Student[]>([])
   const [showResults, setShowResults] = useState(false)
   const [selectedStudent, setSelectedStudent] = useState<Student | null>(null)
-  const [ticketCount, setTicketCount] = useState(1)
+  const [studentRegistrations, setStudentRegistrations] = useState<Registration[]>([])
+  const [removingRegistrationId, setRemovingRegistrationId] = useState<string | null>(null)
   const [showConfirmation, setShowConfirmation] = useState(false)
   const [registrationCode, setRegistrationCode] = useState("")
   const [loadingTours, setLoadingTours] = useState(true)
@@ -38,14 +38,13 @@ export default function WorkerPage() {
   const [formError, setFormError] = useState<string | null>(null)
   const [walkInMode, setWalkInMode] = useState(false)
   const [walkIn, setWalkIn] = useState<WalkIn>({ name: "", email: "", studentId: "" })
-  const [maxTickets, setMaxTickets] = useState(2)
 
   const selectedTourDetails = useMemo(() => tours.find((t) => t.id === selectedTour), [tours, selectedTour])
   const confirmationStudentName = selectedStudent?.name || (walkInMode ? walkIn.name : "")
 
   useEffect(() => {
     const loadInitial = async () => {
-      await Promise.all([refreshSettings(), refreshTours()])
+      await refreshTours()
       await refreshRegistrations()
     }
     loadInitial()
@@ -54,15 +53,6 @@ export default function WorkerPage() {
   useEffect(() => {
     if (checkinTour) refreshRegistrations(checkinTour)
   }, [checkinTour])
-
-  const refreshSettings = async () => {
-    try {
-      const settings = await apiClient.getSettings()
-      setMaxTickets(settings.maxTicketsPerStudent || 2)
-    } catch (err) {
-      setError(err instanceof Error ? err.message : "Failed to load settings")
-    }
-  }
 
   const refreshTours = async () => {
     setLoadingTours(true)
@@ -125,10 +115,9 @@ export default function WorkerPage() {
 
     let payload: {
       tourId: string
-      tickets: number
       studentId?: string
       student?: WalkIn
-    } = { tourId: selectedTour, tickets: ticketCount }
+    } = { tourId: selectedTour }
 
     if (selectedStudent) {
       payload = { ...payload, studentId: selectedStudent.id }
@@ -150,7 +139,12 @@ export default function WorkerPage() {
       setShowConfirmation(true)
       setTours((prev) => prev.map((t) => (t.id === tour.id ? tour : t)))
       await refreshRegistrations(checkinTour || selectedTour)
-      setSelectedStudent(payload.student ? { ...payload.student, id: registration.studentId } : selectedStudent)
+      const currentStudent = payload.student ? { ...payload.student, id: registration.studentId } : selectedStudent
+      setSelectedStudent(currentStudent)
+      if (currentStudent?.id) {
+        const data = await apiClient.listRegistrationsByStudent(currentStudent.id)
+        setStudentRegistrations(data)
+      }
       setWalkIn({ name: "", email: "", studentId: "" })
       setWalkInMode(false)
       setError(null)
@@ -158,6 +152,22 @@ export default function WorkerPage() {
       setFormError(err instanceof Error ? err.message : "Could not complete registration")
     } finally {
       setSubmitting(false)
+    }
+  }
+
+  const handleUnregister = async (registrationId: string) => {
+    if (!selectedStudent) return
+    setRemovingRegistrationId(registrationId)
+    try {
+      await apiClient.deleteRegistration(registrationId)
+      const data = await apiClient.listRegistrationsByStudent(selectedStudent.id)
+      setStudentRegistrations(data)
+      await refreshTours()
+      setError(null)
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Unable to unregister student")
+    } finally {
+      setRemovingRegistrationId(null)
     }
   }
 
@@ -176,7 +186,7 @@ export default function WorkerPage() {
     setSearchResults([])
     setShowResults(false)
     setSelectedStudent(null)
-    setTicketCount(1)
+    setStudentRegistrations([])
     setShowConfirmation(false)
     setRegistrationCode("")
     setWalkInMode(false)
@@ -185,8 +195,6 @@ export default function WorkerPage() {
 
   const canSubmit =
     !!selectedTour && (selectedStudent !== null || (walkInMode && walkIn.name && walkIn.email && walkIn.studentId))
-
-  const ticketOptions = Array.from({ length: maxTickets }, (_, i) => i + 1)
 
   return (
     <div className="min-h-screen bg-background">
@@ -303,6 +311,7 @@ export default function WorkerPage() {
                           onChange={(e) => {
                             setSearchQuery(e.target.value)
                             setSelectedStudent(null)
+                            setStudentRegistrations([])
                           }}
                           onFocus={() => searchResults.length > 0 && setShowResults(true)}
                         />
@@ -337,6 +346,10 @@ export default function WorkerPage() {
                                 className="w-full text-left px-4 py-3 hover:bg-muted transition-colors"
                                 onClick={() => {
                                   setSelectedStudent(student)
+                                  apiClient
+                                    .listRegistrationsByStudent(student.id)
+                                    .then((data) => setStudentRegistrations(data))
+                                    .catch(() => setStudentRegistrations([]))
                                   setSearchQuery(student.name)
                                   setShowResults(false)
                                   setWalkInMode(false)
@@ -359,6 +372,44 @@ export default function WorkerPage() {
                         <p className="font-semibold">{selectedStudent.name}</p>
                         <p className="text-sm text-muted-foreground">{selectedStudent.email}</p>
                         <p className="text-sm text-muted-foreground">ID: {selectedStudent.studentId}</p>
+                        <div className="pt-2 text-sm text-muted-foreground">
+                          <p className="font-semibold text-foreground">Registered Tours</p>
+                          {studentRegistrations.length === 0 ? (
+                            <p>None yet</p>
+                          ) : (
+                            <div className="space-y-2">
+                              {studentRegistrations.map((reg) => (
+                                <div
+                                  key={reg.id}
+                                  className="flex items-center justify-between gap-3 bg-background/70 border border-border rounded-md px-3 py-2"
+                                >
+                                  <div>
+                                    <p className="font-semibold text-foreground">{reg.tour?.name || "Unknown tour"}</p>
+                                    <p className="text-xs text-muted-foreground">
+                                      {reg.tour
+                                        ? `${new Date(reg.tour.startTime).toLocaleTimeString([], {
+                                            hour: "numeric",
+                                            minute: "2-digit",
+                                          })} - ${new Date(reg.tour.endTime).toLocaleTimeString([], {
+                                            hour: "numeric",
+                                            minute: "2-digit",
+                                          })}`
+                                        : "Schedule unavailable"}
+                                    </p>
+                                  </div>
+                                  <Button
+                                    variant="outline"
+                                    size="sm"
+                                    onClick={() => handleUnregister(reg.id)}
+                                    disabled={removingRegistrationId === reg.id}
+                                  >
+                                    {removingRegistrationId === reg.id ? "Removing..." : "Unregister"}
+                                  </Button>
+                                </div>
+                              ))}
+                            </div>
+                          )}
+                        </div>
                       </div>
                     )}
 
@@ -406,27 +457,10 @@ export default function WorkerPage() {
                 <Card>
                   <CardHeader>
                     <CardTitle>Register</CardTitle>
-                    <CardDescription>Select number of tickets (max {maxTickets} per student)</CardDescription>
+                    <CardDescription>Each student can register for up to 2 tours</CardDescription>
                   </CardHeader>
                   <CardContent className="space-y-4">
-                    <div className="space-y-2">
-                      <Label>Number of Tickets</Label>
-                      <Select value={ticketCount.toString()} onValueChange={(v) => setTicketCount(Number.parseInt(v))}>
-                        <SelectTrigger>
-                          <SelectValue />
-                        </SelectTrigger>
-                        <SelectContent>
-                          {ticketOptions.map((option) => (
-                            <SelectItem key={option} value={option.toString()}>
-                              {option} ticket{option > 1 ? "s" : ""}
-                            </SelectItem>
-                          ))}
-                        </SelectContent>
-                      </Select>
-                    </div>
-
                     {formError && <p className="text-sm text-destructive">{formError}</p>}
-
                     <Button className="w-full" size="lg" disabled={!canSubmit || submitting} onClick={handleRegister}>
                       {submitting ? "Submitting..." : "Complete Registration"}
                     </Button>
@@ -456,11 +490,6 @@ export default function WorkerPage() {
                     <div className="p-4 bg-muted rounded-lg space-y-1">
                       <p className="text-sm text-muted-foreground">Tour</p>
                       <p className="font-semibold">{selectedTourDetails?.name}</p>
-                    </div>
-
-                    <div className="p-4 bg-muted rounded-lg space-y-1">
-                      <p className="text-sm text-muted-foreground">Tickets</p>
-                      <p className="font-semibold">{ticketCount}</p>
                     </div>
 
                     <div className="p-4 bg-primary/10 border border-primary/20 rounded-lg">
