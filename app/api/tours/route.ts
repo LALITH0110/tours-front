@@ -1,5 +1,5 @@
 import { NextResponse } from "next/server"
-import { createTour, listTours } from "../../../../database/queries"
+import { createTour, listTours } from "../../../database/queries"
 
 export async function GET() {
   const data = await listTours()

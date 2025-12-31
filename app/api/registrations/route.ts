@@ -1,5 +1,5 @@
 import { NextResponse } from "next/server"
-import { createRegistration, createStudent, listRegistrations } from "../../../../database/queries"
+import { createRegistration, createStudent, listRegistrations } from "../../../database/queries"
 
 export async function GET(request: Request) {
   const { searchParams } = new URL(request.url)

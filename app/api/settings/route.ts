@@ -1,5 +1,5 @@
 import { NextResponse } from "next/server"
-import { getSettings, updateSettings } from "../../../../database/queries"
+import { getSettings, updateSettings } from "../../../database/queries"
 
 export async function GET() {
   const settings = await getSettings()
