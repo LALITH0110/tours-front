@@ -298,97 +298,90 @@ export const listRegistrations = async (payload: { tourId?: string; studentId?: 
 }
 
 export const createRegistration = async (payload: { tourId: string; studentId: string }) => {
-  return sql.begin(async (tx) => {
-    const settingsRows = await tx<{ max_tours_per_student: number }[]>`
-      SELECT max_tours_per_student FROM settings WHERE id = 1
-    `
-    const limit = settingsRows[0]?.max_tours_per_student ?? 2
+  const settingsRows = await sql<{ max_tours_per_student: number }[]>`
+    SELECT max_tours_per_student FROM settings WHERE id = 1
+  `
+  const limit = settingsRows[0]?.max_tours_per_student ?? 2
 
-    const tourRows = await tx<TourRow[]>`
-      SELECT id, name, start_time, end_time, capacity, registered, checked_in, paused, canceled
-      FROM tours
-      WHERE id = ${payload.tourId}
-      FOR UPDATE
-    `
-    const tour = tourRows[0]
-    if (!tour) throw new Error("Tour not found")
-    if (tour.canceled) throw new Error("Tour is canceled")
-    if (tour.paused) throw new Error("Tour is paused")
+  const tourRows = await sql<TourRow[]>`
+    SELECT id, name, start_time, end_time, capacity, registered, checked_in, paused, canceled
+    FROM tours
+    WHERE id = ${payload.tourId}
+  `
+  const tour = tourRows[0]
+  if (!tour) throw new Error("Tour not found")
+  if (tour.canceled) throw new Error("Tour is canceled")
+  if (tour.paused) throw new Error("Tour is paused")
 
-    const existing = await tx<{ id: string }[]>`
-      SELECT id FROM registrations WHERE student_id = ${payload.studentId} AND tour_id = ${payload.tourId}
-    `
-    if (existing.length > 0) {
-      const error = new Error("Student already registered for this tour")
-      ;(error as Error & { code?: string }).code = "ALREADY_REGISTERED"
-      throw error
-    }
+  const existing = await sql<{ id: string }[]>`
+    SELECT id FROM registrations WHERE student_id = ${payload.studentId} AND tour_id = ${payload.tourId}
+  `
+  if (existing.length > 0) {
+    const error = new Error("Student already registered for this tour")
+    ;(error as Error & { code?: string }).code = "ALREADY_REGISTERED"
+    throw error
+  }
 
-    const countRows = await tx<{ count: number }[]>`
-      SELECT COUNT(DISTINCT tour_id) AS count FROM registrations WHERE student_id = ${payload.studentId}
-    `
-    if ((countRows[0]?.count ?? 0) >= limit) {
-      const error = new Error("Student already registered for maximum tours")
-      ;(error as Error & { code?: string }).code = "TOUR_LIMIT_REACHED"
-      throw error
-    }
+  const countRows = await sql<{ count: number }[]>`
+    SELECT COUNT(DISTINCT tour_id) AS count FROM registrations WHERE student_id = ${payload.studentId}
+  `
+  if ((countRows[0]?.count ?? 0) >= limit) {
+    const error = new Error("Student already registered for maximum tours")
+    ;(error as Error & { code?: string }).code = "TOUR_LIMIT_REACHED"
+    throw error
+  }
 
-    const remaining = tour.capacity - tour.registered
-    if (remaining < 1) {
-      const error = new Error("Not enough capacity")
-      ;(error as Error & { code?: string }).code = "INSUFFICIENT_CAPACITY"
-      throw error
-    }
+  const remaining = tour.capacity - tour.registered
+  if (remaining < 1) {
+    const error = new Error("Not enough capacity")
+    ;(error as Error & { code?: string }).code = "INSUFFICIENT_CAPACITY"
+    throw error
+  }
 
-    const registrationId = crypto.randomUUID()
-    const code = crypto.randomUUID().slice(0, 5).toUpperCase()
-    const now = new Date().toISOString()
-    await tx`
-      INSERT INTO registrations (id, student_id, tour_id, code, checked_in, created_at)
-      VALUES (${registrationId}, ${payload.studentId}, ${payload.tourId}, ${code}, false, ${now})
-    `
-    await tx`
-      UPDATE tours SET registered = registered + 1, updated_at = NOW() WHERE id = ${payload.tourId}
-    `
+  const registrationId = crypto.randomUUID()
+  const code = crypto.randomUUID().slice(0, 5).toUpperCase()
+  const now = new Date().toISOString()
+  await sql`
+    INSERT INTO registrations (id, student_id, tour_id, code, checked_in, created_at)
+    VALUES (${registrationId}, ${payload.studentId}, ${payload.tourId}, ${code}, false, ${now})
+  `
+  await sql`
+    UPDATE tours SET registered = registered + 1, updated_at = NOW() WHERE id = ${payload.tourId}
+  `
 
-    const updatedTour = await getTour(payload.tourId)
-    return { registrationId, code, updatedTour }
-  })
+  const updatedTour = await getTour(payload.tourId)
+  return { registrationId, code, updatedTour }
 }
 
 export const toggleCheckIn = async (registrationId: string) => {
-  return sql.begin(async (tx) => {
-    const rows = await tx<{ id: string; tour_id: string; checked_in: boolean }[]>`
-      SELECT id, tour_id, checked_in FROM registrations WHERE id = ${registrationId} FOR UPDATE
-    `
-    const reg = rows[0]
-    if (!reg) return null
-    const newCheckedIn = !reg.checked_in
-    await tx`UPDATE registrations SET checked_in = ${newCheckedIn} WHERE id = ${registrationId}`
-    await tx`
-      UPDATE tours
-      SET checked_in = checked_in + ${newCheckedIn ? 1 : -1}, updated_at = NOW()
-      WHERE id = ${reg.tour_id}
-    `
-    return { id: reg.id, checkedIn: newCheckedIn }
-  })
+  const rows = await sql<{ id: string; tour_id: string; checked_in: boolean }[]>`
+    SELECT id, tour_id, checked_in FROM registrations WHERE id = ${registrationId}
+  `
+  const reg = rows[0]
+  if (!reg) return null
+  const newCheckedIn = !reg.checked_in
+  await sql`UPDATE registrations SET checked_in = ${newCheckedIn} WHERE id = ${registrationId}`
+  await sql`
+    UPDATE tours
+    SET checked_in = checked_in + ${newCheckedIn ? 1 : -1}, updated_at = NOW()
+    WHERE id = ${reg.tour_id}
+  `
+  return { id: reg.id, checkedIn: newCheckedIn }
 }
 
 export const removeRegistration = async (registrationId: string) => {
-  return sql.begin(async (tx) => {
-    const rows = await tx<{ id: string; tour_id: string; checked_in: boolean }[]>`
-      SELECT id, tour_id, checked_in FROM registrations WHERE id = ${registrationId} FOR UPDATE
-    `
-    const reg = rows[0]
-    if (!reg) return null
-    await tx`DELETE FROM registrations WHERE id = ${registrationId}`
-    await tx`
-      UPDATE tours
-      SET registered = GREATEST(registered - 1, 0),
-          checked_in = GREATEST(checked_in - ${reg.checked_in ? 1 : 0}, 0),
-          updated_at = NOW()
-      WHERE id = ${reg.tour_id}
-    `
-    return reg
-  })
+  const rows = await sql<{ id: string; tour_id: string; checked_in: boolean }[]>`
+    SELECT id, tour_id, checked_in FROM registrations WHERE id = ${registrationId}
+  `
+  const reg = rows[0]
+  if (!reg) return null
+  await sql`DELETE FROM registrations WHERE id = ${registrationId}`
+  await sql`
+    UPDATE tours
+    SET registered = GREATEST(registered - 1, 0),
+        checked_in = GREATEST(checked_in - ${reg.checked_in ? 1 : 0}, 0),
+        updated_at = NOW()
+    WHERE id = ${reg.tour_id}
+  `
+  return reg
 }
