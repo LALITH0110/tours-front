@@ -17,6 +17,7 @@ CREATE TABLE IF NOT EXISTS tours (
   capacity INT NOT NULL CHECK (capacity > 0),
   registered INT NOT NULL DEFAULT 0,
   checked_in INT NOT NULL DEFAULT 0,
+  status_override TEXT,
   paused BOOLEAN NOT NULL DEFAULT FALSE,
   canceled BOOLEAN NOT NULL DEFAULT FALSE,
   created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),

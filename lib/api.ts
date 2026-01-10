@@ -11,6 +11,7 @@ export interface Tour {
   remaining: number
   paused?: boolean
   canceled?: boolean
+  statusOverride?: "available" | "filling-fast"
   status: TourStatus
 }
 
@@ -68,7 +69,9 @@ export const apiClient = {
     api<Tour>("/tours", { method: "POST", body: JSON.stringify(payload) }),
   updateTour: (
     id: string,
-    payload: Partial<Pick<Tour, "name" | "startTime" | "endTime" | "capacity" | "paused" | "canceled">>,
+    payload: Partial<Pick<Tour, "name" | "startTime" | "endTime" | "capacity" | "paused" | "canceled">> & {
+      statusOverride?: "available" | "filling-fast"
+    },
   ) => api<Tour>(`/tours/${id}`, { method: "PATCH", body: JSON.stringify(payload) }),
   overrideCapacity: (id: string, capacity: number) =>
     api<Tour>(`/tours/${id}/override-capacity`, { method: "POST", body: JSON.stringify({ capacity }) }),

@@ -3,14 +3,168 @@
 import { useEffect, useMemo, useState } from "react"
 import Link from "next/link"
 import { Button } from "@/components/ui/button"
+import { Calendar as CalendarPicker } from "@/components/ui/calendar"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
+import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover"
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import { Badge } from "@/components/ui/badge"
 import { Switch } from "@/components/ui/switch"
-import { ArrowLeft, Users, Calendar, BarChart3, Upload, Download } from "lucide-react"
+import { ArrowLeft, Users, Calendar as CalendarIcon, BarChart3, Upload, Download } from "lucide-react"
 import { apiClient, type Registration, type Tour } from "../../lib/api"
+
+const TIME_STEP_MINUTES = 5
+const HOUR_OPTIONS = Array.from({ length: 12 }, (_, index) => String(index + 1))
+const MINUTE_OPTIONS = Array.from({ length: 60 / TIME_STEP_MINUTES }, (_, index) =>
+  String(index * TIME_STEP_MINUTES).padStart(2, "0"),
+)
+const MERIDIEM_OPTIONS = ["AM", "PM"] as const
+
+const buildDateTimeValue = (date: Date, time: string) => {
+  const year = date.getFullYear()
+  const month = String(date.getMonth() + 1).padStart(2, "0")
+  const day = String(date.getDate()).padStart(2, "0")
+  return `${year}-${month}-${day}T${time}`
+}
+
+const parseDateTimeValue = (value: string) => {
+  if (!value) {
+    return { date: undefined as Date | undefined, hour12: "9", minute: "00", meridiem: "AM" as const }
+  }
+  const date = new Date(value)
+  if (Number.isNaN(date.getTime())) {
+    return { date: undefined as Date | undefined, hour12: "9", minute: "00", meridiem: "AM" as const }
+  }
+  const hour24 = date.getHours()
+  const minuteValue = Math.floor(date.getMinutes() / TIME_STEP_MINUTES) * TIME_STEP_MINUTES
+  const meridiem = hour24 >= 12 ? "PM" : "AM"
+  const hour12 = hour24 % 12 === 0 ? 12 : hour24 % 12
+  return {
+    date,
+    hour12: String(hour12),
+    minute: String(minuteValue).padStart(2, "0"),
+    meridiem,
+  }
+}
+
+const formatDateTimeLabel = (value: string) => {
+  if (!value) return ""
+  const date = new Date(value)
+  if (Number.isNaN(date.getTime())) return ""
+  return date.toLocaleString([], { dateStyle: "medium", timeStyle: "short" })
+}
+
+const buildTimeValue = (hour12: string, minute: string, meridiem: "AM" | "PM") => {
+  const hourValue = Number.parseInt(hour12, 10)
+  const minuteValue = Number.parseInt(minute, 10) || 0
+  let hour24 = hourValue % 12
+  if (meridiem === "PM") hour24 += 12
+  return `${String(hour24).padStart(2, "0")}:${String(minuteValue).padStart(2, "0")}`
+}
+
+const DateTimePicker = ({
+  id,
+  value,
+  onChange,
+  placeholder = "Select date and time",
+}: {
+  id?: string
+  value: string
+  onChange: (value: string) => void
+  placeholder?: string
+}) => {
+  const { date, hour12, minute, meridiem } = parseDateTimeValue(value)
+
+  const handleDateSelect = (selected?: Date) => {
+    if (!selected) return
+    onChange(buildDateTimeValue(selected, buildTimeValue(hour12, minute, meridiem)))
+  }
+
+  const handleTimeChange = (next: { hour12?: string; minute?: string; meridiem?: "AM" | "PM" }) => {
+    const nextHour = next.hour12 ?? hour12
+    const nextMinute = next.minute ?? minute
+    const nextMeridiem = next.meridiem ?? meridiem
+    const timeValue = buildTimeValue(nextHour, nextMinute, nextMeridiem)
+    const baseDate = date ?? new Date()
+    onChange(buildDateTimeValue(baseDate, timeValue))
+  }
+
+  return (
+    <Popover>
+      <PopoverTrigger asChild>
+        <Button id={id} variant="outline" className="w-full justify-between font-normal">
+          <span className={value ? "" : "text-muted-foreground"}>
+            {value ? formatDateTimeLabel(value) : placeholder}
+          </span>
+          <CalendarIcon className="size-4 opacity-70" />
+        </Button>
+      </PopoverTrigger>
+      <PopoverContent align="start" className="w-[min(100vw,32rem)] p-0">
+        <div className="grid gap-4 p-4 md:grid-cols-[auto_1fr]">
+          <CalendarPicker mode="single" selected={date} onSelect={handleDateSelect} initialFocus />
+          <div className="space-y-3">
+            <div className="text-sm font-medium">Time</div>
+            <div className="grid grid-cols-3 gap-2">
+              <div className="space-y-1">
+                <div className="text-xs text-muted-foreground">Hour</div>
+                <Select value={hour12} onValueChange={(next) => handleTimeChange({ hour12: next })}>
+                  <SelectTrigger className="w-full">
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {HOUR_OPTIONS.map((option) => (
+                      <SelectItem key={option} value={option}>
+                        {option}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
+              <div className="space-y-1">
+                <div className="text-xs text-muted-foreground">Minute</div>
+                <Select value={minute} onValueChange={(next) => handleTimeChange({ minute: next })}>
+                  <SelectTrigger className="w-full">
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {MINUTE_OPTIONS.map((option) => (
+                      <SelectItem key={option} value={option}>
+                        {option}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
+              <div className="space-y-1">
+                <div className="text-xs text-muted-foreground">AM/PM</div>
+                <Select value={meridiem} onValueChange={(next) => handleTimeChange({ meridiem: next as "AM" | "PM" })}>
+                  <SelectTrigger className="w-full">
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {MERIDIEM_OPTIONS.map((option) => (
+                      <SelectItem key={option} value={option}>
+                        {option}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
+            </div>
+            <div className="flex items-center justify-between text-xs text-muted-foreground">
+              <span>5 minute increments</span>
+              <Button type="button" variant="ghost" size="sm" onClick={() => onChange("")}>
+                Clear
+              </Button>
+            </div>
+          </div>
+        </div>
+      </PopoverContent>
+    </Popover>
+  )
+}
 
 export default function AdminPage() {
   const [maxTickets, setMaxTickets] = useState(2)
@@ -331,25 +485,23 @@ export default function AdminPage() {
                   </div>
                   <div className="space-y-2">
                     <Label htmlFor="tour-start">Start Time</Label>
-                    <Input
+                    <DateTimePicker
                       id="tour-start"
-                      type="datetime-local"
                       value={newTour.startTime}
-                      onChange={(e) => setNewTour((prev) => ({ ...prev, startTime: e.target.value }))}
+                      onChange={(value) => setNewTour((prev) => ({ ...prev, startTime: value }))}
                     />
                   </div>
                   <div className="space-y-2">
                     <Label htmlFor="tour-end">End Time</Label>
-                    <Input
+                    <DateTimePicker
                       id="tour-end"
-                      type="datetime-local"
                       value={newTour.endTime}
-                      onChange={(e) => setNewTour((prev) => ({ ...prev, endTime: e.target.value }))}
+                      onChange={(value) => setNewTour((prev) => ({ ...prev, endTime: value }))}
                     />
                   </div>
                   <div className="md:col-span-2">
                     <Button onClick={handleCreateTour} disabled={creatingTour}>
-                      <Calendar className="w-4 h-4 mr-2" />
+                      <CalendarIcon className="w-4 h-4 mr-2" />
                       {creatingTour ? "Creating..." : "Create Tour"}
                     </Button>
                   </div>
@@ -414,18 +566,16 @@ export default function AdminPage() {
                             </div>
                             <div className="space-y-2">
                               <Label>Start Time</Label>
-                              <Input
-                                type="datetime-local"
+                              <DateTimePicker
                                 value={editTour.startTime}
-                                onChange={(e) => setEditTour((prev) => ({ ...prev, startTime: e.target.value }))}
+                                onChange={(value) => setEditTour((prev) => ({ ...prev, startTime: value }))}
                               />
                             </div>
                             <div className="space-y-2">
                               <Label>End Time</Label>
-                              <Input
-                                type="datetime-local"
+                              <DateTimePicker
                                 value={editTour.endTime}
-                                onChange={(e) => setEditTour((prev) => ({ ...prev, endTime: e.target.value }))}
+                                onChange={(value) => setEditTour((prev) => ({ ...prev, endTime: value }))}
                               />
                             </div>
                             <div className="flex gap-2 md:col-span-2">

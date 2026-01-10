@@ -19,6 +19,7 @@ interface TourRow {
   capacity: number
   registered: number
   checked_in: number
+  status_override: string | null
   paused: boolean
   canceled: boolean
 }
@@ -28,6 +29,8 @@ const computeStatus = (tour: TourRow, fillingFastThreshold: number): TourStatus 
   if (tour.paused) return "paused"
   const remaining = Math.max(tour.capacity - tour.registered, 0)
   if (remaining === 0) return "full"
+  if (tour.status_override === "available") return "available"
+  if (tour.status_override === "filling-fast") return "filling-fast"
   const percentRemaining = remaining / tour.capacity
   if (percentRemaining <= 0.1) return "almost-full"
   if (percentRemaining <= fillingFastThreshold) return "filling-fast"
@@ -72,7 +75,7 @@ export const updateSettings = async (payload: {
 export const listTours = async () => {
   const settings = await getSettings()
   const rows = await sql<TourRow[]>`
-    SELECT id, name, start_time, end_time, capacity, registered, checked_in, paused, canceled
+    SELECT id, name, start_time, end_time, capacity, registered, checked_in, status_override, paused, canceled
     FROM tours
     ORDER BY start_time ASC
   `
@@ -97,7 +100,7 @@ export const listTours = async () => {
 export const getTour = async (id: string) => {
   const settings = await getSettings()
   const rows = await sql<TourRow[]>`
-    SELECT id, name, start_time, end_time, capacity, registered, checked_in, paused, canceled
+    SELECT id, name, start_time, end_time, capacity, registered, checked_in, status_override, paused, canceled
     FROM tours
     WHERE id = ${id}
   `
@@ -128,7 +131,18 @@ export const createTour = async (payload: { name: string; startTime: string; end
   return getTour(id)
 }
 
-export const updateTour = async (id: string, payload: Partial<{ name: string; startTime: string; endTime: string; capacity: number; paused: boolean; canceled: boolean }>) => {
+export const updateTour = async (
+  id: string,
+  payload: Partial<{
+    name: string
+    startTime: string
+    endTime: string
+    capacity: number
+    paused: boolean
+    canceled: boolean
+    statusOverride: "available" | "filling-fast"
+  }>,
+) => {
   if (payload.capacity !== undefined) {
     const existing = await sql<{ registered: number }[]>`SELECT registered FROM tours WHERE id = ${id}`
     if (!existing[0]) return null
@@ -146,6 +160,7 @@ export const updateTour = async (id: string, payload: Partial<{ name: string; st
       start_time = COALESCE(${payload.startTime}, start_time),
       end_time = COALESCE(${payload.endTime}, end_time),
       capacity = COALESCE(${payload.capacity}, capacity),
+      status_override = COALESCE(${payload.statusOverride}, status_override),
       paused = COALESCE(${payload.paused}, paused),
       canceled = COALESCE(${payload.canceled}, canceled),
       updated_at = NOW()
@@ -223,6 +238,7 @@ export const listRegistrations = async (payload: { tourId?: string; studentId?: 
       tour_capacity: number
       tour_registered: number
       tour_checked_in: number
+      tour_status_override: string | null
       tour_paused: boolean
       tour_canceled: boolean
     }[]
@@ -243,6 +259,7 @@ export const listRegistrations = async (payload: { tourId?: string; studentId?: 
       t.capacity AS tour_capacity,
       t.registered AS tour_registered,
       t.checked_in AS tour_checked_in,
+      t.status_override AS tour_status_override,
       t.paused AS tour_paused,
       t.canceled AS tour_canceled
     FROM registrations r
@@ -262,6 +279,7 @@ export const listRegistrations = async (payload: { tourId?: string; studentId?: 
       capacity: row.tour_capacity,
       registered: row.tour_registered,
       checked_in: row.tour_checked_in,
+      status_override: row.tour_status_override,
       paused: row.tour_paused,
       canceled: row.tour_canceled,
     }
@@ -353,14 +371,19 @@ export const createRegistration = async (payload: { tourId: string; studentId: s
   return { registrationId, code, updatedTour }
 }
 
-export const toggleCheckIn = async (registrationId: string) => {
+export const toggleCheckIn = async (registrationIdOrCode?: string) => {
+  const normalized = registrationIdOrCode?.trim() ?? ""
+  if (!normalized) return null
   const rows = await sql<{ id: string; tour_id: string; checked_in: boolean }[]>`
-    SELECT id, tour_id, checked_in FROM registrations WHERE id = ${registrationId}
+    SELECT id, tour_id, checked_in
+    FROM registrations
+    WHERE id = ${normalized}
+       OR LOWER(code) = LOWER(${normalized})
   `
   const reg = rows[0]
   if (!reg) return null
   const newCheckedIn = !reg.checked_in
-  await sql`UPDATE registrations SET checked_in = ${newCheckedIn} WHERE id = ${registrationId}`
+  await sql`UPDATE registrations SET checked_in = ${newCheckedIn} WHERE id = ${reg.id}`
   await sql`
     UPDATE tours
     SET checked_in = checked_in + ${newCheckedIn ? 1 : -1}, updated_at = NOW()

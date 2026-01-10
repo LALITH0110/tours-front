@@ -1,11 +1,12 @@
 "use client"
 
-import { useState, useEffect } from "react"
-import Link from "next/link"
+import { useState, useEffect, useMemo } from "react"
 import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Badge } from "@/components/ui/badge"
-import { ArrowLeft, Clock, Users, AlertCircle } from "lucide-react"
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
+import { Input } from "@/components/ui/input"
+import { Clock, Users, AlertCircle } from "lucide-react"
 import { apiClient, type Tour } from "../../lib/api"
 
 export default function DisplayPage() {
@@ -14,6 +15,38 @@ export default function DisplayPage() {
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
   const [announcement, setAnnouncement] = useState<string>("")
+  const [editingTourId, setEditingTourId] = useState<string | null>(null)
+  const [editingName, setEditingName] = useState("")
+  const [savingTourId, setSavingTourId] = useState<string | null>(null)
+  const [editingAnnouncement, setEditingAnnouncement] = useState(false)
+  const [announcementDraft, setAnnouncementDraft] = useState("")
+  const [savingAnnouncement, setSavingAnnouncement] = useState(false)
+
+  const getStartTimestamp = (value: string) => {
+    const normalized = value.includes("T") ? value : value.replace(" ", "T")
+    const parsed = new Date(normalized)
+    if (!Number.isNaN(parsed.getTime())) return parsed.getTime()
+    const match = normalized.match(/(\d{4})-(\d{2})-(\d{2})T(\d{2}):(\d{2})/)
+    if (match) {
+      const [, year, month, day, hour, minute] = match
+      return new Date(
+        Number(year),
+        Number(month) - 1,
+        Number(day),
+        Number(hour),
+        Number(minute),
+      ).getTime()
+    }
+    return Number.MAX_SAFE_INTEGER
+  }
+
+  const sortedTours = useMemo(
+    () => [...tours].sort((a, b) => getStartTimestamp(a.startTime) - getStartTimestamp(b.startTime)),
+    [tours],
+  )
+  const [editingStatusTourId, setEditingStatusTourId] = useState<string | null>(null)
+  const [statusSelection, setStatusSelection] = useState<"available" | "filling-fast" | "canceled">("available")
+  const [savingStatusTourId, setSavingStatusTourId] = useState<string | null>(null)
 
   useEffect(() => {
     const timer = setInterval(() => {
@@ -51,7 +84,7 @@ export default function DisplayPage() {
       case "available":
         return "bg-green-100 text-green-800 border-green-200"
       case "filling-fast":
-        return "bg-yellow-100 text-yellow-800 border-yellow-200"
+        return "bg-orange-100 text-orange-800 border-orange-200"
       case "almost-full":
         return "bg-orange-100 text-orange-800 border-orange-200"
       case "full":
@@ -59,7 +92,7 @@ export default function DisplayPage() {
       case "paused":
         return "bg-gray-100 text-gray-800 border-gray-200"
       case "canceled":
-        return "bg-gray-100 text-gray-800 border-gray-200"
+        return "bg-red-100 text-red-800 border-red-200"
       default:
         return "bg-gray-100 text-gray-800 border-gray-200"
     }
@@ -70,7 +103,7 @@ export default function DisplayPage() {
       case "available":
         return "Available"
       case "filling-fast":
-        return "Filling Fast"
+        return "Filling Soon"
       case "almost-full":
         return "Almost Full"
       case "full":
@@ -84,21 +117,105 @@ export default function DisplayPage() {
     }
   }
 
+  const startEditingName = (tour: Tour) => {
+    setEditingTourId(tour.id)
+    setEditingName(tour.name)
+  }
+
+  const cancelEditingName = () => {
+    setEditingTourId(null)
+    setEditingName("")
+  }
+
+  const saveTourName = async (tourId: string) => {
+    const trimmed = editingName.trim()
+    if (!trimmed) {
+      setError("Tour name cannot be empty")
+      return
+    }
+    setSavingTourId(tourId)
+    try {
+      const updated = await apiClient.updateTour(tourId, { name: trimmed })
+      setTours((prev) => prev.map((tour) => (tour.id === updated.id ? updated : tour)))
+      setEditingTourId(null)
+      setError(null)
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Failed to update tour name")
+    } finally {
+      setSavingTourId(null)
+    }
+  }
+
+  const startEditingAnnouncement = () => {
+    setAnnouncementDraft(announcement)
+    setEditingAnnouncement(true)
+  }
+
+  const cancelEditingAnnouncement = () => {
+    setEditingAnnouncement(false)
+    setAnnouncementDraft(announcement)
+  }
+
+  const saveAnnouncement = async () => {
+    const trimmed = announcementDraft.trim()
+    setSavingAnnouncement(true)
+    try {
+      const updated = await apiClient.updateSettings({ announcement: trimmed })
+      setAnnouncement(updated.announcement || "")
+      setEditingAnnouncement(false)
+      setError(null)
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Failed to update announcement")
+    } finally {
+      setSavingAnnouncement(false)
+    }
+  }
+
+  const startEditingStatus = (tour: Tour) => {
+    setEditingStatusTourId(tour.id)
+    if (tour.status === "canceled") {
+      setStatusSelection("canceled")
+    } else if (tour.status === "available") {
+      setStatusSelection("available")
+    } else {
+      setStatusSelection("filling-fast")
+    }
+  }
+
+  const saveTourStatus = async (tour: Tour, nextStatus: "available" | "filling-fast" | "canceled") => {
+    setSavingStatusTourId(tour.id)
+    try {
+      let updated: Tour | undefined
+      if (nextStatus === "canceled") {
+        updated = await apiClient.cancelTour(tour.id)
+      } else {
+        updated = await apiClient.updateTour(tour.id, {
+          statusOverride: nextStatus,
+          canceled: false,
+          paused: false,
+        })
+      }
+      if (updated) {
+        setTours((prev) => prev.map((item) => (item.id === updated?.id ? updated : item)))
+      }
+      setEditingStatusTourId(null)
+      setError(null)
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Failed to update tour status")
+    } finally {
+      setSavingStatusTourId(null)
+    }
+  }
+
   return (
     <div className="min-h-screen bg-background">
       <header className="border-b border-border bg-card">
         <div className="container mx-auto px-4 py-6">
           <div className="flex items-center justify-between">
             <div>
-              <h1 className="text-3xl font-bold text-primary">Illinois Tech</h1>
+              <h1 className="text-5xl font-bold text-primary">Illinois Tech</h1>
               <p className="text-sm text-muted-foreground">Live Tour Display</p>
             </div>
-            <Link href="/">
-              <Button variant="outline" size="sm">
-                <ArrowLeft className="w-4 h-4 mr-2" />
-                Back to Home
-              </Button>
-            </Link>
           </div>
         </div>
       </header>
@@ -107,8 +224,8 @@ export default function DisplayPage() {
         <div className="space-y-8">
           <div className="flex items-center justify-between">
             <div>
-              <h2 className="text-5xl font-bold text-balance">{"Today's Tours"}</h2>
-              <p className="text-xl text-muted-foreground mt-2">
+              <h2 className="text-4xl font-bold text-balance">{"Today's Tours"}</h2>
+              <p className="text-lg text-muted-foreground mt-2">
                 {currentTime.toLocaleDateString("en-US", {
                   weekday: "long",
                   year: "numeric",
@@ -125,12 +242,46 @@ export default function DisplayPage() {
             </div>
           </div>
 
-          {announcement && (
+          {editingAnnouncement ? (
             <div className="bg-primary/10 border border-primary/20 rounded-lg p-4">
-              <p className="text-center text-lg font-medium">
+              <div className="flex flex-col gap-3 md:flex-row md:items-center">
+                <Input
+                  value={announcementDraft}
+                  onChange={(event) => setAnnouncementDraft(event.target.value)}
+                  onKeyDown={(event) => {
+                    if (event.key === "Enter") saveAnnouncement()
+                    if (event.key === "Escape") cancelEditingAnnouncement()
+                  }}
+                  placeholder="Enter announcement message"
+                  aria-label="Announcement message"
+                />
+                <div className="flex gap-2">
+                  <Button onClick={saveAnnouncement} disabled={savingAnnouncement}>
+                    Save
+                  </Button>
+                  <Button variant="outline" onClick={cancelEditingAnnouncement} disabled={savingAnnouncement}>
+                    Cancel
+                  </Button>
+                </div>
+              </div>
+            </div>
+          ) : announcement ? (
+            <div className="bg-primary/10 border border-primary/20 rounded-lg p-4">
+              <button
+                type="button"
+                className="w-full text-center text-lg font-medium"
+                onClick={startEditingAnnouncement}
+                aria-label="Edit announcement"
+              >
                 <AlertCircle className="inline w-5 h-5 mr-2 -mt-0.5" />
                 {announcement}
-              </p>
+              </button>
+            </div>
+          ) : (
+            <div className="flex justify-center">
+              <Button variant="outline" onClick={startEditingAnnouncement}>
+                Add announcement
+              </Button>
             </div>
           )}
 
@@ -145,15 +296,91 @@ export default function DisplayPage() {
           ) : (
             <>
               <div className="grid lg:grid-cols-2 gap-6">
-                {tours.map((tour) => (
+                {sortedTours.map((tour) => (
                   <Card key={tour.id} className="overflow-hidden">
-                    <CardHeader className="bg-muted/50">
-                      <div className="flex items-start justify-between gap-4">
-                        <CardTitle className="text-2xl">{tour.name}</CardTitle>
-                        <Badge className={getStatusColor(tour.status)}>{getStatusLabel(tour.status)}</Badge>
+                    <CardHeader
+                      className="relative overflow-hidden bg-muted/50 -mt-1"
+                    >
+                      <div className="relative z-10 flex items-start justify-between gap-4">
+                        {editingTourId === tour.id ? (
+                          <div className="flex flex-1 items-center gap-2">
+                            <Input
+                              value={editingName}
+                              onChange={(event) => setEditingName(event.target.value)}
+                              onKeyDown={(event) => {
+                                if (event.key === "Enter") saveTourName(tour.id)
+                                if (event.key === "Escape") cancelEditingName()
+                              }}
+                              className="h-9 text-lg"
+                              aria-label="Edit tour name"
+                              autoFocus
+                            />
+                            <Button size="sm" onClick={() => saveTourName(tour.id)} disabled={savingTourId === tour.id}>
+                              Save
+                            </Button>
+                            <Button
+                              size="sm"
+                              variant="outline"
+                              onClick={cancelEditingName}
+                              disabled={savingTourId === tour.id}
+                            >
+                              Cancel
+                            </Button>
+                          </div>
+                        ) : (
+                          <button
+                            type="button"
+                            className="text-left"
+                            onClick={() => startEditingName(tour)}
+                            aria-label={`Edit tour name ${tour.name}`}
+                          >
+                            <CardTitle className="text-2xl hover:underline">{tour.name}</CardTitle>
+                          </button>
+                        )}
+                        {editingStatusTourId === tour.id ? (
+                          <Select
+                            value={statusSelection}
+                            onValueChange={(value) => {
+                              const next = value as "available" | "filling-fast" | "canceled"
+                              setStatusSelection(next)
+                              void saveTourStatus(tour, next)
+                            }}
+                            onOpenChange={(open) => {
+                              if (!open) setEditingStatusTourId(null)
+                            }}
+                          >
+                            <SelectTrigger className="h-9 w-[220px]" disabled={savingStatusTourId === tour.id}>
+                              <SelectValue />
+                            </SelectTrigger>
+                            <SelectContent>
+                              <SelectItem value="available">
+                                <span className="inline-flex items-center gap-2">
+                                  <span className="h-2 w-2 rounded-full bg-green-500" />
+                                  Available
+                                </span>
+                              </SelectItem>
+                              <SelectItem value="filling-fast">
+                                <span className="inline-flex items-center gap-2">
+                                  <span className="h-2 w-2 rounded-full bg-orange-500" />
+                                  Filling Soon
+                                </span>
+                              </SelectItem>
+                              <SelectItem value="canceled">
+                                <span className="inline-flex items-center gap-2">
+                                  <span className="h-2 w-2 rounded-full bg-red-500" />
+                                  Canceled
+                                </span>
+                              </SelectItem>
+                            </SelectContent>
+                          </Select>
+                        ) : (
+                          <button type="button" onClick={() => startEditingStatus(tour)}>
+                            <Badge className={getStatusColor(tour.status)}>{getStatusLabel(tour.status)}</Badge>
+                          </button>
+                        )}
                       </div>
                     </CardHeader>
-                    <CardContent className="pt-6">
+                    <CardContent className="relative pt-6">
                       <div className="space-y-4">
                         <div className="flex items-center gap-3 text-muted-foreground">
                           <Clock className="w-5 h-5 text-primary" />
