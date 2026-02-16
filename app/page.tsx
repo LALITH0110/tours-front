@@ -20,7 +20,7 @@ export default function HomePage() {
       <main className="container mx-auto px-4 py-12">
         <div className="max-w-5xl mx-auto space-y-8">
           <div className="text-center space-y-4">
-            <h2 className="text-4xl font-bold text-balance">Welcome to Campus Tour Registration</h2>
+            <h2 className="text-4xl font-bold text-balance">Welcome to Ticket Exchange Registration</h2>
             <p className="text-xl text-muted-foreground text-balance max-w-2xl mx-auto">
               Experience Illinois Tech through our guided campus tours. Choose your role to get started.
             </p>
