@@ -209,10 +209,10 @@ export const createWalkInRegistration = async (payload: { tourId: string; name: 
   const now = new Date().toISOString()
   await sql`
     INSERT INTO registrations (id, student_id, tour_id, code, checked_in, created_at)
-    VALUES (${registrationId}, ${studentId}, ${payload.tourId}, ${code}, true, ${now})
+    VALUES (${registrationId}, ${studentId}, ${payload.tourId}, ${code}, false, ${now})
   `
   await sql`
-    UPDATE tours SET registered = registered + 1, checked_in = checked_in + 1, updated_at = NOW()
+    UPDATE tours SET registered = registered + 1, updated_at = NOW()
     WHERE id = ${payload.tourId}
   `
 

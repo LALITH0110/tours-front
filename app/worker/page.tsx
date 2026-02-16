@@ -8,7 +8,7 @@ import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import { Badge } from "@/components/ui/badge"
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
-import { ArrowLeft, CheckCircle2 } from "lucide-react"
+import { ArrowLeft, CheckCircle2, Trash2 } from "lucide-react"
 import { apiClient, type Registration, type Tour } from "../../lib/api"
 
 export default function WorkerPage() {
@@ -22,6 +22,8 @@ export default function WorkerPage() {
   const [loadingTours, setLoadingTours] = useState(true)
   const [loadingRegistrations, setLoadingRegistrations] = useState(true)
   const [submitting, setSubmitting] = useState(false)
+  const [deletingRegistrationId, setDeletingRegistrationId] = useState<string | null>(null)
+  const [confirmDeleteId, setConfirmDeleteId] = useState<string | null>(null)
   const [error, setError] = useState<string | null>(null)
   const [formError, setFormError] = useState<string | null>(null)
 
@@ -99,6 +101,22 @@ export default function WorkerPage() {
       await refreshRegistrations(checkinTour)
     } catch (err) {
       setError(err instanceof Error ? err.message : "Unable to update check-in")
+    }
+  }
+
+  const handleDeleteRegistration = async (id: string) => {
+    setConfirmDeleteId(null)
+    setDeletingRegistrationId(id)
+    try {
+      await apiClient.deleteRegistration(id)
+      await refreshTours()
+      await refreshRegistrations(checkinTour)
+      setConfirmDeleteId(null)
+      setError(null)
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Unable to remove registration")
+    } finally {
+      setDeletingRegistrationId(null)
     }
   }
 
@@ -230,14 +248,14 @@ export default function WorkerPage() {
                     </div>
                     {formError && <p className="text-sm text-destructive">{formError}</p>}
                     <Button className="w-full" size="lg" disabled={!canSubmit || submitting} onClick={handleRegister}>
-                      {submitting ? "Checking in..." : "Check In & Complete Registration"}
+                      {submitting ? "Registering..." : "Complete Registration"}
                     </Button>
                     {showConfirmation && (
                       <div className="mt-2 p-4 bg-green-50 border border-green-200 rounded-lg flex items-center justify-between gap-4">
                         <div className="flex items-center gap-3">
                           <CheckCircle2 className="w-5 h-5 text-green-600 shrink-0" />
                           <div>
-                            <p className="font-semibold text-green-900">{confirmedName} checked in</p>
+                            <p className="font-semibold text-green-900">{confirmedName} registered</p>
                             <p className="text-sm text-green-700">{selectedTourDetails?.remaining ?? 0} spots remaining</p>
                           </div>
                         </div>
@@ -307,23 +325,57 @@ export default function WorkerPage() {
                     <p className="text-sm text-muted-foreground">No registrations for this tour yet.</p>
                   ) : (
                     registrations.map((reg) => (
-                      <div key={reg.id} className="flex items-center justify-between p-4 border border-border rounded-lg">
-                        <div className="flex-1">
-                          <p className="font-semibold">{reg.student?.name || "Unknown student"}</p>
-                          <p className="text-sm text-muted-foreground">Code: {reg.code}</p>
+                      <div key={reg.id} className="border border-border rounded-lg overflow-hidden">
+                        <div className="flex items-center justify-between p-4">
+                          <div className="flex-1">
+                            <p className="font-semibold">{reg.student?.name || "Unknown student"}</p>
+                            <p className="text-sm text-muted-foreground">Code: {reg.code}</p>
+                          </div>
+                          <div className="flex items-center gap-2">
+                            {reg.checkedIn && (
+                              <Badge className="bg-green-100 text-green-800 border-green-200">Checked In</Badge>
+                            )}
+                            <Button
+                              variant={reg.checkedIn ? "outline" : "default"}
+                              size="sm"
+                              onClick={() => handleCheckIn(reg.id)}
+                              disabled={deletingRegistrationId === reg.id}
+                            >
+                              {reg.checkedIn ? "Undo" : "Check In"}
+                            </Button>
+                            <Button
+                              variant="ghost"
+                              size="icon"
+                              className="text-muted-foreground hover:text-destructive"
+                              onClick={() => setConfirmDeleteId(confirmDeleteId === reg.id ? null : reg.id)}
+                              disabled={deletingRegistrationId === reg.id}
+                            >
+                              <Trash2 className="w-4 h-4" />
+                            </Button>
+                          </div>
                         </div>
-                        <div className="flex items-center gap-3">
-                          {reg.checkedIn && (
-                            <Badge className="bg-green-100 text-green-800 border-green-200">Checked In</Badge>
-                          )}
-                          <Button
-                            variant={reg.checkedIn ? "outline" : "default"}
-                            size="sm"
-                            onClick={() => handleCheckIn(reg.id)}
-                          >
-                            {reg.checkedIn ? "Undo" : "Check In"}
-                          </Button>
-                        </div>
+                        {confirmDeleteId === reg.id && (
+                          <div className="flex items-center justify-between gap-3 px-4 py-3 bg-destructive/5 border-t border-destructive/20">
+                            <p className="text-sm text-destructive font-medium">Remove this registration?</p>
+                            <div className="flex gap-2">
+                              <Button
+                                size="sm"
+                                variant="outline"
+                                onClick={() => setConfirmDeleteId(null)}
+                              >
+                                Cancel
+                              </Button>
+                              <Button
+                                size="sm"
+                                variant="destructive"
+                                onClick={() => handleDeleteRegistration(reg.id)}
+                                disabled={deletingRegistrationId === reg.id}
+                              >
+                                {deletingRegistrationId === reg.id ? "Removing..." : "Remove"}
+                              </Button>
+                            </div>
+                          </div>
+                        )}
                       </div>
                     ))
                   )}

@@ -28,7 +28,7 @@ export async function POST(request: Request) {
               tourId,
               tickets: 1,
               code: result.code,
-              checkedIn: true,
+              checkedIn: false,
               createdAt: new Date().toISOString(),
             },
             tour: result.updatedTour,
