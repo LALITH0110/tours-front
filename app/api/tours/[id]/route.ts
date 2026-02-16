@@ -1,5 +1,5 @@
 import { NextResponse } from "next/server"
-import { getTour, updateTour } from "../../../../database/queries"
+import { getTour, updateTour, deleteTour } from "../../../../database/queries"
 
 export async function GET(_request: Request, { params }: { params: Promise<{ id?: string }> }) {
   const { id } = await params
@@ -7,6 +7,14 @@ export async function GET(_request: Request, { params }: { params: Promise<{ id?
   const tour = await getTour(id)
   if (!tour) return NextResponse.json({ error: "Tour not found" }, { status: 404 })
   return NextResponse.json({ data: tour })
+}
+
+export async function DELETE(_request: Request, { params }: { params: Promise<{ id?: string }> }) {
+  const { id } = await params
+  if (!id) return NextResponse.json({ error: "Tour not found" }, { status: 404 })
+  const result = await deleteTour(id)
+  if (!result) return NextResponse.json({ error: "Tour not found" }, { status: 404 })
+  return NextResponse.json({ data: result })
 }
 
 export async function PATCH(request: Request, { params }: { params: Promise<{ id?: string }> }) {

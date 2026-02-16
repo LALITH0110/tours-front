@@ -77,6 +77,7 @@ export const apiClient = {
     api<Tour>(`/tours/${id}/override-capacity`, { method: "POST", body: JSON.stringify({ capacity }) }),
   pauseTour: (id: string) => api<Tour>(`/tours/${id}/pause`, { method: "POST" }),
   resumeTour: (id: string) => api<Tour>(`/tours/${id}/resume`, { method: "POST" }),
+  deleteTour: (id: string) => api<{ id: string }>(`/tours/${id}`, { method: "DELETE" }),
   cancelTour: (id: string) => api<Tour>(`/tours/${id}/cancel`, { method: "POST" }),
   uncancelTour: (id: string) => api<Tour>(`/tours/${id}/uncancel`, { method: "POST" }),
   searchStudents: (q: string) => api<Student[]>(`/students${q ? `?q=${encodeURIComponent(q)}` : ""}`),
@@ -88,6 +89,7 @@ export const apiClient = {
     api<Registration[]>(`/registrations?studentId=${encodeURIComponent(studentId)}`),
   createRegistration: (payload: {
     tourId: string
+    name?: string
     studentId?: string
     student?: Pick<Student, "name" | "email" | "studentId">
   }) =>

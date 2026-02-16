@@ -1,6 +1,6 @@
 "use client"
 
-import { useEffect, useMemo, useState } from "react"
+import { useEffect, useState } from "react"
 import Link from "next/link"
 import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
@@ -8,39 +8,24 @@ import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import { Badge } from "@/components/ui/badge"
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
-import { ArrowLeft, Search, CheckCircle2, UserPlus } from "lucide-react"
-import { apiClient, type Registration, type Student, type Tour } from "../../lib/api"
-
-interface WalkIn {
-  name: string
-  email: string
-  studentId: string
-}
+import { ArrowLeft, CheckCircle2 } from "lucide-react"
+import { apiClient, type Registration, type Tour } from "../../lib/api"
 
 export default function WorkerPage() {
   const [tours, setTours] = useState<Tour[]>([])
   const [registrations, setRegistrations] = useState<Registration[]>([])
   const [selectedTour, setSelectedTour] = useState("")
   const [checkinTour, setCheckinTour] = useState("")
-  const [searchQuery, setSearchQuery] = useState("")
-  const [searchResults, setSearchResults] = useState<Student[]>([])
-  const [showResults, setShowResults] = useState(false)
-  const [selectedStudent, setSelectedStudent] = useState<Student | null>(null)
-  const [studentRegistrations, setStudentRegistrations] = useState<Registration[]>([])
-  const [removingRegistrationId, setRemovingRegistrationId] = useState<string | null>(null)
+  const [name, setName] = useState("")
   const [showConfirmation, setShowConfirmation] = useState(false)
-  const [registrationCode, setRegistrationCode] = useState("")
+  const [confirmedName, setConfirmedName] = useState("")
   const [loadingTours, setLoadingTours] = useState(true)
   const [loadingRegistrations, setLoadingRegistrations] = useState(true)
-  const [searching, setSearching] = useState(false)
   const [submitting, setSubmitting] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const [formError, setFormError] = useState<string | null>(null)
-  const [walkInMode, setWalkInMode] = useState(false)
-  const [walkIn, setWalkIn] = useState<WalkIn>({ name: "", email: "", studentId: "" })
 
-  const selectedTourDetails = useMemo(() => tours.find((t) => t.id === selectedTour), [tours, selectedTour])
-  const confirmationStudentName = selectedStudent?.name || (walkInMode ? walkIn.name : "")
+  const selectedTourDetails = tours.find((t) => t.id === selectedTour)
 
   useEffect(() => {
     const loadInitial = async () => {
@@ -82,92 +67,28 @@ export default function WorkerPage() {
     }
   }
 
-  useEffect(() => {
-    if (!searchQuery.trim()) {
-      setSearchResults([])
-      setShowResults(false)
-      return
-    }
-
-    const timeout = setTimeout(async () => {
-      setSearching(true)
-      try {
-        const results = await apiClient.searchStudents(searchQuery.trim())
-        setSearchResults(results)
-        setShowResults(true)
-        setError(null)
-      } catch (err) {
-        setError(err instanceof Error ? err.message : "Search failed")
-      } finally {
-        setSearching(false)
-      }
-    }, 300)
-
-    return () => clearTimeout(timeout)
-  }, [searchQuery])
-
   const handleRegister = async () => {
     setFormError(null)
     if (!selectedTour) {
       setFormError("Select a tour")
       return
     }
-
-    let payload: {
-      tourId: string
-      studentId?: string
-      student?: WalkIn
-    } = { tourId: selectedTour }
-
-    if (selectedStudent) {
-      payload = { ...payload, studentId: selectedStudent.id }
-    } else if (walkInMode) {
-      if (!walkIn.name || !walkIn.email || !walkIn.studentId) {
-        setFormError("Enter name, email, and student ID")
-        return
-      }
-      payload = { ...payload, student: walkIn }
-    } else {
-      setFormError("Select a student or use walk-in")
+    if (!name.trim()) {
+      setFormError("Enter student name")
       return
     }
-
     setSubmitting(true)
     try {
-      const { registration, tour } = await apiClient.createRegistration(payload)
-      setRegistrationCode(registration.code)
+      const { tour } = await apiClient.createRegistration({ tourId: selectedTour, name: name.trim() })
+      setConfirmedName(name.trim())
       setShowConfirmation(true)
       setTours((prev) => prev.map((t) => (t.id === tour.id ? tour : t)))
       await refreshRegistrations(checkinTour || selectedTour)
-      const currentStudent = payload.student ? { ...payload.student, id: registration.studentId } : selectedStudent
-      setSelectedStudent(currentStudent)
-      if (currentStudent?.id) {
-        const data = await apiClient.listRegistrationsByStudent(currentStudent.id)
-        setStudentRegistrations(data)
-      }
-      setWalkIn({ name: "", email: "", studentId: "" })
-      setWalkInMode(false)
       setError(null)
     } catch (err) {
       setFormError(err instanceof Error ? err.message : "Could not complete registration")
     } finally {
       setSubmitting(false)
-    }
-  }
-
-  const handleUnregister = async (registrationId: string) => {
-    if (!selectedStudent) return
-    setRemovingRegistrationId(registrationId)
-    try {
-      await apiClient.deleteRegistration(registrationId)
-      const data = await apiClient.listRegistrationsByStudent(selectedStudent.id)
-      setStudentRegistrations(data)
-      await refreshTours()
-      setError(null)
-    } catch (err) {
-      setError(err instanceof Error ? err.message : "Unable to unregister student")
-    } finally {
-      setRemovingRegistrationId(null)
     }
   }
 
@@ -182,19 +103,13 @@ export default function WorkerPage() {
   }
 
   const resetForm = () => {
-    setSearchQuery("")
-    setSearchResults([])
-    setShowResults(false)
-    setSelectedStudent(null)
-    setStudentRegistrations([])
+    setName("")
     setShowConfirmation(false)
-    setRegistrationCode("")
-    setWalkInMode(false)
-    setWalkIn({ name: "", email: "", studentId: "" })
+    setConfirmedName("")
+    setFormError(null)
   }
 
-  const canSubmit =
-    !!selectedTour && (selectedStudent !== null || (walkInMode && walkIn.name && walkIn.email && walkIn.studentId))
+  const canSubmit = !!selectedTour && !!name.trim()
 
   return (
     <div className="min-h-screen bg-background">
@@ -223,8 +138,7 @@ export default function WorkerPage() {
           </TabsList>
 
           <TabsContent value="register" className="space-y-6">
-            {!showConfirmation ? (
-              <div className="max-w-3xl mx-auto space-y-6">
+            <div className="max-w-3xl mx-auto space-y-6">
                 {error && (
                   <div className="bg-destructive/10 border border-destructive/20 text-destructive px-4 py-3 rounded-lg text-center">
                     {error}
@@ -299,210 +213,46 @@ export default function WorkerPage() {
 
                 <Card>
                   <CardHeader>
-                    <CardTitle>Find Student</CardTitle>
-                    <CardDescription>Search by name, email, or student ID</CardDescription>
+                    <CardTitle>Student Name</CardTitle>
+                    <CardDescription>First name and last initial (e.g. John D)</CardDescription>
                   </CardHeader>
                   <CardContent className="space-y-4">
-                    <div className="flex gap-2">
-                      <div className="flex-1">
-                        <Input
-                          placeholder="Enter name, email, or student ID..."
-                          value={searchQuery}
-                          onChange={(e) => {
-                            setSearchQuery(e.target.value)
-                            setSelectedStudent(null)
-                            setStudentRegistrations([])
-                          }}
-                          onFocus={() => searchResults.length > 0 && setShowResults(true)}
-                        />
-                      </div>
-                      <Button variant="outline" disabled>
-                        <Search className="w-4 h-4 mr-2" />
-                        {searching ? "Searching..." : "Type to search"}
-                      </Button>
+                    <div className="space-y-2">
+                      <Label htmlFor="student-name">Name</Label>
+                      <Input
+                        id="student-name"
+                        placeholder="John D"
+                        value={name}
+                        onChange={(e) => setName(e.target.value)}
+                        onKeyDown={(e) => e.key === "Enter" && canSubmit && !submitting && handleRegister()}
+                        autoComplete="off"
+                      />
                     </div>
-
-                    {showResults && (
-                      <div className="border border-border rounded-lg bg-card shadow-sm overflow-hidden">
-                        {searchResults.length === 0 && !searching ? (
-                          <div className="p-3 text-sm text-muted-foreground flex items-center justify-between">
-                            <span>No matches found</span>
-                            <Button
-                              variant="outline"
-                              size="sm"
-                              className="bg-transparent"
-                              onClick={() => setWalkInMode(true)}
-                            >
-                              <UserPlus className="w-4 h-4 mr-2" />
-                              Walk-in
-                            </Button>
-                          </div>
-                        ) : (
-                          <div className="max-h-56 overflow-y-auto">
-                            {searchResults.map((student) => (
-                              <button
-                                key={student.id}
-                                type="button"
-                                className="w-full text-left px-4 py-3 hover:bg-muted transition-colors"
-                                onClick={() => {
-                                  setSelectedStudent(student)
-                                  apiClient
-                                    .listRegistrationsByStudent(student.id)
-                                    .then((data) => setStudentRegistrations(data))
-                                    .catch(() => setStudentRegistrations([]))
-                                  setSearchQuery(student.name)
-                                  setShowResults(false)
-                                  setWalkInMode(false)
-                                  setWalkIn({ name: "", email: "", studentId: "" })
-                                }}
-                              >
-                                <p className="font-semibold">{student.name}</p>
-                                <p className="text-sm text-muted-foreground">
-                                  {student.email} • {student.studentId}
-                                </p>
-                              </button>
-                            ))}
-                          </div>
-                        )}
-                      </div>
-                    )}
-
-                    {selectedStudent && (
-                      <div className="p-4 bg-primary/10 border border-primary/20 rounded-lg space-y-1">
-                        <p className="font-semibold">{selectedStudent.name}</p>
-                        <p className="text-sm text-muted-foreground">{selectedStudent.email}</p>
-                        <p className="text-sm text-muted-foreground">ID: {selectedStudent.studentId}</p>
-                        <div className="pt-2 text-sm text-muted-foreground">
-                          <p className="font-semibold text-foreground">Registered Tours</p>
-                          {studentRegistrations.length === 0 ? (
-                            <p>None yet</p>
-                          ) : (
-                            <div className="space-y-2">
-                              {studentRegistrations.map((reg) => (
-                                <div
-                                  key={reg.id}
-                                  className="flex items-center justify-between gap-3 bg-background/70 border border-border rounded-md px-3 py-2"
-                                >
-                                  <div>
-                                    <p className="font-semibold text-foreground">{reg.tour?.name || "Unknown tour"}</p>
-                                    <p className="text-xs text-muted-foreground">
-                                      {reg.tour
-                                        ? `${new Date(reg.tour.startTime).toLocaleTimeString([], {
-                                            hour: "numeric",
-                                            minute: "2-digit",
-                                          })} - ${new Date(reg.tour.endTime).toLocaleTimeString([], {
-                                            hour: "numeric",
-                                            minute: "2-digit",
-                                          })}`
-                                        : "Schedule unavailable"}
-                                    </p>
-                                  </div>
-                                  <Button
-                                    variant="outline"
-                                    size="sm"
-                                    onClick={() => handleUnregister(reg.id)}
-                                    disabled={removingRegistrationId === reg.id}
-                                  >
-                                    {removingRegistrationId === reg.id ? "Removing..." : "Unregister"}
-                                  </Button>
-                                </div>
-                              ))}
-                            </div>
-                          )}
-                        </div>
-                      </div>
-                    )}
-
-                    {!selectedStudent && searchQuery && !walkInMode && !showResults && (
-                      <div className="p-4 bg-muted rounded-lg">
-                        <p className="text-sm text-muted-foreground">No student selected. Use walk-in mode?</p>
-                        <Button variant="outline" size="sm" className="mt-2 bg-transparent" onClick={() => setWalkInMode(true)}>
-                          <UserPlus className="w-4 h-4 mr-2" />
-                          Register Walk-in
-                        </Button>
-                      </div>
-                    )}
-
-                    {walkInMode && (
-                      <div className="space-y-3 p-4 border border-border rounded-lg">
-                        <div>
-                          <Label>Name</Label>
-                          <Input
-                            value={walkIn.name}
-                            onChange={(e) => setWalkIn((prev) => ({ ...prev, name: e.target.value }))}
-                            placeholder="Student name"
-                          />
-                        </div>
-                        <div>
-                          <Label>Email</Label>
-                          <Input
-                            value={walkIn.email}
-                            onChange={(e) => setWalkIn((prev) => ({ ...prev, email: e.target.value }))}
-                            placeholder="student@iit.edu"
-                          />
-                        </div>
-                        <div>
-                          <Label>Student ID</Label>
-                          <Input
-                            value={walkIn.studentId}
-                            onChange={(e) => setWalkIn((prev) => ({ ...prev, studentId: e.target.value }))}
-                            placeholder="A20123456"
-                          />
-                        </div>
-                      </div>
-                    )}
-                  </CardContent>
-                </Card>
-
-                <Card>
-                  <CardHeader>
-                    <CardTitle>Register</CardTitle>
-                    <CardDescription>Each student can register for up to 2 tours</CardDescription>
-                  </CardHeader>
-                  <CardContent className="space-y-4">
                     {formError && <p className="text-sm text-destructive">{formError}</p>}
                     <Button className="w-full" size="lg" disabled={!canSubmit || submitting} onClick={handleRegister}>
-                      {submitting ? "Submitting..." : "Complete Registration"}
+                      {submitting ? "Checking in..." : "Check In & Complete Registration"}
                     </Button>
+                    {showConfirmation && (
+                      <div className="mt-2 p-4 bg-green-50 border border-green-200 rounded-lg flex items-center justify-between gap-4">
+                        <div className="flex items-center gap-3">
+                          <CheckCircle2 className="w-5 h-5 text-green-600 shrink-0" />
+                          <div>
+                            <p className="font-semibold text-green-900">{confirmedName} checked in</p>
+                            <p className="text-sm text-green-700">{selectedTourDetails?.remaining ?? 0} spots remaining</p>
+                          </div>
+                        </div>
+                        <button
+                          type="button"
+                          className="text-xs text-green-600 underline shrink-0"
+                          onClick={resetForm}
+                        >
+                          Clear
+                        </button>
+                      </div>
+                    )}
                   </CardContent>
                 </Card>
-              </div>
-            ) : (
-              <div className="max-w-2xl mx-auto">
-                <Card className="border-primary">
-                  <CardHeader className="text-center">
-                    <div className="w-16 h-16 bg-green-100 rounded-full flex items-center justify-center mx-auto mb-4">
-                      <CheckCircle2 className="w-10 h-10 text-green-600" />
-                    </div>
-                    <CardTitle className="text-3xl">Registration Complete!</CardTitle>
-                  </CardHeader>
-                  <CardContent className="space-y-6 text-center">
-                    <div className="space-y-2">
-                      <p className="text-sm text-muted-foreground">Registration Code</p>
-                      <p className="text-5xl font-bold text-primary tracking-wider">{registrationCode}</p>
-                    </div>
-
-                    <div className="p-4 bg-muted rounded-lg space-y-1">
-                      <p className="text-sm text-muted-foreground">Student</p>
-                      <p className="font-semibold">{confirmationStudentName}</p>
-                    </div>
-
-                    <div className="p-4 bg-muted rounded-lg space-y-1">
-                      <p className="text-sm text-muted-foreground">Tour</p>
-                      <p className="font-semibold">{selectedTourDetails?.name}</p>
-                    </div>
-
-                    <div className="p-4 bg-primary/10 border border-primary/20 rounded-lg">
-                      <p className="font-semibold">Spots left now: {selectedTourDetails?.remaining ?? 0}</p>
-                    </div>
-
-                    <Button onClick={resetForm} className="w-full" size="lg">
-                      Register Another Student
-                    </Button>
-                  </CardContent>
-                </Card>
-              </div>
-            )}
+            </div>
           </TabsContent>
 
           <TabsContent value="checkin" className="space-y-6">
@@ -549,7 +299,6 @@ export default function WorkerPage() {
               <Card>
                 <CardHeader>
                   <CardTitle>Registrants</CardTitle>
-                  <Input placeholder="Search registrants..." className="mt-4" disabled />
                 </CardHeader>
                 <CardContent className="space-y-3">
                   {loadingRegistrations ? (
@@ -561,9 +310,7 @@ export default function WorkerPage() {
                       <div key={reg.id} className="flex items-center justify-between p-4 border border-border rounded-lg">
                         <div className="flex-1">
                           <p className="font-semibold">{reg.student?.name || "Unknown student"}</p>
-                          <p className="text-sm text-muted-foreground">
-                            Code: {reg.code} • {reg.tickets} ticket{reg.tickets > 1 ? "s" : ""}
-                          </p>
+                          <p className="text-sm text-muted-foreground">Code: {reg.code}</p>
                         </div>
                         <div className="flex items-center gap-3">
                           {reg.checkedIn && (

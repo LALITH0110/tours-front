@@ -318,6 +318,20 @@ export default function AdminPage() {
     }
   }
 
+  const handleDeleteTour = async (tour: Tour) => {
+    if (!window.confirm(`Permanently delete "${tour.name}"? This will also remove all registrations and cannot be undone.`)) return
+    setTourActionId(tour.id)
+    try {
+      await apiClient.deleteTour(tour.id)
+      setTours((prev) => prev.filter((item) => item.id !== tour.id))
+      setError(null)
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Failed to delete tour")
+    } finally {
+      setTourActionId(null)
+    }
+  }
+
   const startEditTour = (tour: Tour) => {
     setEditingTourId(tour.id)
     setEditTour({
@@ -584,6 +598,13 @@ export default function AdminPage() {
                               </Button>
                               <Button variant="outline" onClick={cancelEditTour} disabled={tourActionId === tour.id}>
                                 Cancel
+                              </Button>
+                              <Button
+                                variant="destructive"
+                                onClick={() => handleDeleteTour(tour)}
+                                disabled={tourActionId === tour.id}
+                              >
+                                Delete Tour
                               </Button>
                             </div>
                           </div>

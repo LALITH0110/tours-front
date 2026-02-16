@@ -1,5 +1,5 @@
 import { NextResponse } from "next/server"
-import { createRegistration, createStudent, listRegistrations } from "../../../database/queries"
+import { createRegistration, createStudent, createWalkInRegistration, listRegistrations } from "../../../database/queries"
 
 export async function GET(request: Request) {
   const { searchParams } = new URL(request.url)
@@ -11,8 +11,39 @@ export async function GET(request: Request) {
 
 export async function POST(request: Request) {
   const body = await request.json().catch(() => ({}))
-  const { tourId, studentId, student } = body || {}
+  const { tourId, studentId, student, name } = body || {}
   if (!tourId) return NextResponse.json({ error: "tourId is required" }, { status: 400 })
+
+  // Name-only walk-in: register + check in immediately
+  if (name && !studentId && !student) {
+    if (!name.trim()) return NextResponse.json({ error: "name is required" }, { status: 400 })
+    try {
+      const result = await createWalkInRegistration({ tourId, name: name.trim() })
+      return NextResponse.json(
+        {
+          data: {
+            registration: {
+              id: result.registrationId,
+              studentId: result.studentId,
+              tourId,
+              tickets: 1,
+              code: result.code,
+              checkedIn: true,
+              createdAt: new Date().toISOString(),
+            },
+            tour: result.updatedTour,
+          },
+        },
+        { status: 201 },
+      )
+    } catch (err) {
+      const code = (err as Error & { code?: string }).code
+      if (code === "INSUFFICIENT_CAPACITY") {
+        return NextResponse.json({ error: "Not enough capacity" }, { status: 409 })
+      }
+      return NextResponse.json({ error: (err as Error).message || "Unable to create registration" }, { status: 400 })
+    }
+  }
 
   let finalStudentId = studentId
   if (!finalStudentId) {

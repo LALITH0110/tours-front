@@ -181,6 +181,53 @@ export const cancelTour = async (id: string) => updateTour(id, { canceled: true,
 
 export const uncancelTour = async (id: string) => updateTour(id, { canceled: false, paused: false })
 
+export const createWalkInRegistration = async (payload: { tourId: string; name: string }) => {
+  const tourRows = await sql<TourRow[]>`
+    SELECT id, name, start_time, end_time, capacity, registered, checked_in, paused, canceled, status_override
+    FROM tours WHERE id = ${payload.tourId}
+  `
+  const tour = tourRows[0]
+  if (!tour) throw new Error("Tour not found")
+  if (tour.canceled) throw new Error("Tour is canceled")
+  if (tour.paused) throw new Error("Tour is paused")
+  const remaining = tour.capacity - tour.registered
+  if (remaining < 1) {
+    const error = new Error("Not enough capacity")
+    ;(error as Error & { code?: string }).code = "INSUFFICIENT_CAPACITY"
+    throw error
+  }
+
+  const studentId = crypto.randomUUID()
+  const fakeEmail = `${crypto.randomUUID()}@walkin.local`
+  await sql`
+    INSERT INTO students (id, name, email, student_id)
+    VALUES (${studentId}, ${payload.name}, ${fakeEmail}, ${studentId})
+  `
+
+  const registrationId = crypto.randomUUID()
+  const code = crypto.randomUUID().slice(0, 5).toUpperCase()
+  const now = new Date().toISOString()
+  await sql`
+    INSERT INTO registrations (id, student_id, tour_id, code, checked_in, created_at)
+    VALUES (${registrationId}, ${studentId}, ${payload.tourId}, ${code}, true, ${now})
+  `
+  await sql`
+    UPDATE tours SET registered = registered + 1, checked_in = checked_in + 1, updated_at = NOW()
+    WHERE id = ${payload.tourId}
+  `
+
+  const updatedTour = await getTour(payload.tourId)
+  return { registrationId, code, studentId, updatedTour }
+}
+
+export const deleteTour = async (id: string) => {
+  const existing = await sql<{ id: string }[]>`SELECT id FROM tours WHERE id = ${id}`
+  if (!existing[0]) return null
+  await sql`DELETE FROM registrations WHERE tour_id = ${id}`
+  await sql`DELETE FROM tours WHERE id = ${id}`
+  return { id }
+}
+
 export const searchStudents = async (query: string) => {
   if (!query) return []
   const q = `%${query.toLowerCase()}%`
