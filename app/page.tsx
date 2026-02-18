@@ -26,7 +26,7 @@ export default function HomePage() {
             </p>
           </div>
 
-          <div className="grid md:grid-cols-3 gap-6 mt-12">
+          <div className="grid md:grid-cols-2 lg:grid-cols-4 gap-6 mt-12">
             <Link href="/display" className="block group">
               <Card className="h-full transition-all hover:shadow-lg hover:border-primary">
                 <CardHeader>
@@ -42,6 +42,26 @@ export default function HomePage() {
                   </p>
                   <Button className="w-full mt-6 bg-transparent" variant="outline">
                     View Tours
+                  </Button>
+                </CardContent>
+              </Card>
+            </Link>
+
+            <Link href="/display2" className="block group">
+              <Card className="h-full transition-all hover:shadow-lg hover:border-primary">
+                <CardHeader>
+                  <div className="w-12 h-12 rounded-lg bg-primary/10 flex items-center justify-center mb-4 group-hover:bg-primary/20 transition-colors">
+                    <CalendarDays className="w-6 h-6 text-primary" />
+                  </div>
+                  <CardTitle className="text-2xl">Live Display 2</CardTitle>
+                  <CardDescription className="text-base">All tour events in one compact view</CardDescription>
+                </CardHeader>
+                <CardContent>
+                  <p className="text-sm text-muted-foreground">
+                    See every tour event card at a glance — all tours displayed together in a single section.
+                  </p>
+                  <Button className="w-full mt-6 bg-transparent" variant="outline">
+                    View All Tours
                   </Button>
                 </CardContent>
               </Card>
@@ -121,13 +141,13 @@ export default function HomePage() {
             </ul>
           </div>
         </div>
-      </main>
+      </main >
 
       <footer className="border-t border-border mt-16 py-8">
         <div className="container mx-auto px-4 text-center text-sm text-muted-foreground">
           <p>© 2025 Illinois Tech Campus Tours. All rights reserved.</p>
         </div>
       </footer>
-    </div>
+    </div >
   )
 }
