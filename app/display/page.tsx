@@ -44,6 +44,26 @@ export default function DisplayPage() {
     () => [...tours].sort((a, b) => getStartTimestamp(a.startTime) - getStartTimestamp(b.startTime)),
     [tours],
   )
+
+  const hourGroups = useMemo(() => {
+    const groups: { label: string; slotKey: string; tours: Tour[] }[] = []
+    for (const tour of sortedTours) {
+      const d = new Date(getStartTimestamp(tour.startTime))
+      const slotKey = `${d.getFullYear()}-${d.getMonth()}-${d.getDate()}-${d.getHours()}`
+      let group = groups.find((g) => g.slotKey === slotKey)
+      if (!group) {
+        const startLabel = d.toLocaleTimeString([], { hour: "numeric", hour12: true })
+        const endD = new Date(d)
+        endD.setHours(d.getHours() + 1, 0, 0, 0)
+        const endLabel = endD.toLocaleTimeString([], { hour: "numeric", hour12: true })
+        const dateLabel = d.toLocaleDateString("en-US", { weekday: "short", month: "short", day: "numeric" })
+        group = { label: `${dateLabel}  ·  ${startLabel} – ${endLabel}`, slotKey, tours: [] }
+        groups.push(group)
+      }
+      group.tours.push(tour)
+    }
+    return groups
+  }, [sortedTours])
   const [editingStatusTourId, setEditingStatusTourId] = useState<string | null>(null)
   const [statusSelection, setStatusSelection] = useState<"available" | "filling-fast" | "canceled">("available")
   const [savingStatusTourId, setSavingStatusTourId] = useState<string | null>(null)
@@ -242,6 +262,7 @@ export default function DisplayPage() {
             </div>
           </div>
 
+          {/* Announcement banner — commented out to free up display space
           {editingAnnouncement ? (
             <div className="bg-primary/10 border border-primary/20 rounded-lg p-4">
               <div className="flex flex-col gap-3 md:flex-row md:items-center">
@@ -284,6 +305,7 @@ export default function DisplayPage() {
               </Button>
             </div>
           )}
+          */}
 
           {error && (
             <div className="bg-destructive/10 border border-destructive/20 text-destructive px-4 py-3 rounded-lg text-center">
@@ -295,119 +317,122 @@ export default function DisplayPage() {
             <div className="text-center text-muted-foreground">Loading tours…</div>
           ) : (
             <>
-              <div className="grid lg:grid-cols-2 gap-6">
-                {sortedTours.map((tour) => (
-                  <Card key={tour.id} className="overflow-hidden">
-                    <CardHeader
-                      className="relative overflow-hidden bg-muted/50 -mt-1"
-                    >
-                      <div className="relative z-10 flex items-start justify-between gap-4">
-                        {editingTourId === tour.id ? (
-                          <div className="flex flex-1 items-center gap-2">
-                            <Input
-                              value={editingName}
-                              onChange={(event) => setEditingName(event.target.value)}
-                              onKeyDown={(event) => {
-                                if (event.key === "Enter") saveTourName(tour.id)
-                                if (event.key === "Escape") cancelEditingName()
-                              }}
-                              className="h-9 text-lg"
-                              aria-label="Edit tour name"
-                              autoFocus
-                            />
-                            <Button size="sm" onClick={() => saveTourName(tour.id)} disabled={savingTourId === tour.id}>
-                              Save
-                            </Button>
-                            <Button
-                              size="sm"
-                              variant="outline"
-                              onClick={cancelEditingName}
-                              disabled={savingTourId === tour.id}
-                            >
-                              Cancel
-                            </Button>
-                          </div>
-                        ) : (
-                          <button
-                            type="button"
-                            className="text-left"
-                            onClick={() => startEditingName(tour)}
-                            aria-label={`Edit tour name ${tour.name}`}
-                          >
-                            <CardTitle className="text-2xl hover:underline">{tour.name}</CardTitle>
-                          </button>
-                        )}
-                        {editingStatusTourId === tour.id ? (
-                          <Select
-                            value={statusSelection}
-                            onValueChange={(value) => {
-                              const next = value as "available" | "filling-fast" | "canceled"
-                              setStatusSelection(next)
-                              void saveTourStatus(tour, next)
-                            }}
-                            onOpenChange={(open) => {
-                              if (!open) setEditingStatusTourId(null)
-                            }}
-                          >
-                            <SelectTrigger className="h-9 w-[220px]" disabled={savingStatusTourId === tour.id}>
-                              <SelectValue />
-                            </SelectTrigger>
-                            <SelectContent>
-                              <SelectItem value="available">
-                                <span className="inline-flex items-center gap-2">
-                                  <span className="h-2 w-2 rounded-full bg-green-500" />
-                                  Available
-                                </span>
-                              </SelectItem>
-                              <SelectItem value="filling-fast">
-                                <span className="inline-flex items-center gap-2">
-                                  <span className="h-2 w-2 rounded-full bg-orange-500" />
-                                  Filling Soon
-                                </span>
-                              </SelectItem>
-                              <SelectItem value="canceled">
-                                <span className="inline-flex items-center gap-2">
-                                  <span className="h-2 w-2 rounded-full bg-red-500" />
-                                  Canceled
-                                </span>
-                              </SelectItem>
-                            </SelectContent>
-                          </Select>
-                        ) : (
-                          <button type="button" onClick={() => startEditingStatus(tour)}>
-                            <Badge className={getStatusColor(tour.status)}>{getStatusLabel(tour.status)}</Badge>
-                          </button>
-                        )}
-                      </div>
-                    </CardHeader>
-                    <CardContent className="relative pt-6">
-                      <div className="space-y-4">
-                        <div className="flex items-center gap-3 text-muted-foreground">
-                          <Clock className="w-5 h-5 text-primary" />
-                          <span className="text-lg">
-                            {new Date(tour.startTime).toLocaleTimeString([], { hour: "numeric", minute: "2-digit" })} -{" "}
-                            {new Date(tour.endTime).toLocaleTimeString([], { hour: "numeric", minute: "2-digit" })}
-                          </span>
-                        </div>
-
-                        <div className="flex items-center gap-3">
-                          <Users className="w-5 h-5 text-primary" />
-                          <div className="flex-1">
-                            <div className="flex items-baseline gap-2">
-                              <span className="text-3xl font-bold text-primary">{tour.remaining}</span>
-                              <span className="text-lg text-muted-foreground">/ {tour.capacity} spots left</span>
+              <div className="space-y-10">
+                {hourGroups.map((group) => (
+                  <div key={group.slotKey}>
+                    <div className="flex items-center gap-4 mb-4">
+                      <h3 className="text-2xl font-bold text-primary whitespace-nowrap">{group.label}</h3>
+                      <div className="flex-1 h-px bg-border" />
+                      <span className="text-sm text-muted-foreground whitespace-nowrap">
+                        {group.tours.length} tour{group.tours.length !== 1 ? "s" : ""}
+                      </span>
+                    </div>
+                    <div className="grid grid-cols-3 gap-4">
+                      {group.tours.map((tour) => (
+                        <Card key={tour.id} className="overflow-hidden">
+                          <CardHeader className="bg-muted/50 pb-3">
+                            <div className="flex items-start justify-between gap-3">
+                              {editingTourId === tour.id ? (
+                                <div className="flex flex-1 items-center gap-2">
+                                  <Input
+                                    value={editingName}
+                                    onChange={(event) => setEditingName(event.target.value)}
+                                    onKeyDown={(event) => {
+                                      if (event.key === "Enter") saveTourName(tour.id)
+                                      if (event.key === "Escape") cancelEditingName()
+                                    }}
+                                    className="h-8 text-base"
+                                    aria-label="Edit tour name"
+                                    autoFocus
+                                  />
+                                  <Button size="sm" onClick={() => saveTourName(tour.id)} disabled={savingTourId === tour.id}>
+                                    Save
+                                  </Button>
+                                  <Button size="sm" variant="outline" onClick={cancelEditingName} disabled={savingTourId === tour.id}>
+                                    Cancel
+                                  </Button>
+                                </div>
+                              ) : (
+                                <button
+                                  type="button"
+                                  className="text-left"
+                                  onClick={() => startEditingName(tour)}
+                                  aria-label={`Edit tour name ${tour.name}`}
+                                >
+                                  <CardTitle className="text-lg hover:underline leading-snug">{tour.name}</CardTitle>
+                                </button>
+                              )}
+                              {editingStatusTourId === tour.id ? (
+                                <Select
+                                  value={statusSelection}
+                                  onValueChange={(value) => {
+                                    const next = value as "available" | "filling-fast" | "canceled"
+                                    setStatusSelection(next)
+                                    void saveTourStatus(tour, next)
+                                  }}
+                                  onOpenChange={(open) => {
+                                    if (!open) setEditingStatusTourId(null)
+                                  }}
+                                >
+                                  <SelectTrigger className="h-8 w-[160px]" disabled={savingStatusTourId === tour.id}>
+                                    <SelectValue />
+                                  </SelectTrigger>
+                                  <SelectContent>
+                                    <SelectItem value="available">
+                                      <span className="inline-flex items-center gap-2">
+                                        <span className="h-2 w-2 rounded-full bg-green-500" />
+                                        Available
+                                      </span>
+                                    </SelectItem>
+                                    <SelectItem value="filling-fast">
+                                      <span className="inline-flex items-center gap-2">
+                                        <span className="h-2 w-2 rounded-full bg-orange-500" />
+                                        Filling Soon
+                                      </span>
+                                    </SelectItem>
+                                    <SelectItem value="canceled">
+                                      <span className="inline-flex items-center gap-2">
+                                        <span className="h-2 w-2 rounded-full bg-red-500" />
+                                        Canceled
+                                      </span>
+                                    </SelectItem>
+                                  </SelectContent>
+                                </Select>
+                              ) : (
+                                <button type="button" onClick={() => startEditingStatus(tour)} className="shrink-0">
+                                  <Badge className={getStatusColor(tour.status)}>{getStatusLabel(tour.status)}</Badge>
+                                </button>
+                              )}
                             </div>
-                            <div className="mt-2 h-2 bg-muted rounded-full overflow-hidden">
-                              <div
-                                className="h-full bg-primary transition-all"
-                                style={{ width: `${((tour.capacity - tour.remaining) / tour.capacity) * 100}%` }}
-                              />
+                          </CardHeader>
+                          <CardContent className="pt-4 space-y-3">
+                            <div className="flex items-center gap-2 text-muted-foreground">
+                              <Clock className="w-4 h-4 text-primary shrink-0" />
+                              <span className="text-sm">
+                                {new Date(tour.startTime).toLocaleTimeString([], { hour: "numeric", minute: "2-digit" })} –{" "}
+                                {new Date(tour.endTime).toLocaleTimeString([], { hour: "numeric", minute: "2-digit" })}
+                              </span>
                             </div>
-                          </div>
-                        </div>
-                      </div>
-                    </CardContent>
-                  </Card>
+                            <div className="flex items-center gap-2">
+                              <Users className="w-4 h-4 text-primary shrink-0" />
+                              <div className="flex-1">
+                                <div className="flex items-baseline gap-1.5">
+                                  <span className="text-2xl font-bold text-primary">{tour.remaining}</span>
+                                  <span className="text-sm text-muted-foreground">/ {tour.capacity} left</span>
+                                </div>
+                                <div className="mt-1.5 h-2 bg-muted rounded-full overflow-hidden">
+                                  <div
+                                    className="h-full bg-primary transition-all"
+                                    style={{ width: `${((tour.capacity - tour.remaining) / tour.capacity) * 100}%` }}
+                                  />
+                                </div>
+                              </div>
+                            </div>
+                          </CardContent>
+                        </Card>
+                      ))}
+                    </div>
+                  </div>
                 ))}
               </div>
 
